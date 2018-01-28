@@ -1,6 +1,7 @@
 package gui;
 
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
@@ -307,19 +308,16 @@ public class Main extends Application {
         }
     }
 
-    private boolean exec(final String parser, final String inFile, final String outDir, final String debug, final String workspace) {
+    private void exec(final String parser, final String inFile, final String outDir, final String debug, final String workspace) {
         if (inFile.equals("")) {
             _popup(true, "Please first select an input file for " + parser.toUpperCase() + " parser.");
-            return true;
+            return;
         }
 
         if (parser.equals(BC_PARSER) && workspace.equals("")) {
             _popup(true, "Please choose a BaseCode workspace for " + parser.toUpperCase() + " parser.");
-            return true;
+            return;
         }
-
-        Boolean errorFlag = false;
-        StringBuilder sb = new StringBuilder();
 
         final String cmd;
         if(parser.equals(BC_PARSER)) {
@@ -331,60 +329,91 @@ public class Main extends Application {
         }
 
         _updateConsole("Cmd is [" + cmd + "]");
-        String stdMsg = "";
-        String errMsg = "";
-        try {
-            String s;
+        
+        Runnable task = new Runnable() {
+            @Override
+            public void run() {
+                Boolean errFlag = false;
+                StringBuilder sb = new StringBuilder();
+                String msg;
+                String stdMsg = "";
+                String errMsg = "";
+                try {
+                    Process p = Runtime.getRuntime().exec(cmd);
 
-            Process p = Runtime.getRuntime().exec(cmd);
-            BufferedReader stdInput = new BufferedReader(new
-                    InputStreamReader(p.getInputStream()));
+                    BufferedReader stdInput = new BufferedReader(new
+                            InputStreamReader(p.getInputStream()));
 
-            BufferedReader stdError = new BufferedReader(new
-                    InputStreamReader(p.getErrorStream()));
-            // read the output from the command
-            while ((s = stdInput.readLine()) != null) {
-                if(s.contains("Error:") && !errorFlag) {
-                    errorFlag = true;
-                    errMsg = s;
+                    BufferedReader stdError = new BufferedReader(new
+                            InputStreamReader(p.getErrorStream()));
+
+                    // read the output from the command
+                    while ((msg = stdInput.readLine()) != null) {
+                        if (msg.contains("Error:") && !errFlag) {
+                            errFlag = true;
+                            errMsg = msg;
+                        }
+                        stdMsg = msg;
+                        final String line = msg;
+                        Platform.runLater(new Runnable() {
+                            @Override
+                            public void run() {
+                                _updateConsole(line);
+                            }
+                        });
+                        //System.out.println(s);
+                    }
+
+                    // read any errors from the attempted command
+                    while ((msg = stdError.readLine()) != null) {
+                        errFlag = true;
+                        sb.append(msg);
+                        sb.append("\n");
+                        final String line = msg;
+                        Platform.runLater(new Runnable() {
+                            @Override
+                            public void run() {
+                                _updateConsole(line);
+                            }
+                        });
+                        //System.out.println(s);
+                    }
                 }
-                sb.append(s);
-                sb.append("\n");
-                //System.out.println(s);
-            }
-            stdMsg = sb.toString();
-            _updateConsole(stdMsg);
-            sb = new StringBuilder();
+                catch (IOException e) {
+                    System.err.println("Caught IOException: " + e.getMessage());
+                }
+                if (errMsg.equals("") && errFlag) {
+                    errMsg = sb.toString();
+                }
+                final boolean errFlagUI = errFlag;
+                final String errMsgUI = errMsg;
+                final String stdMsgUI = stdMsg;
 
-            // read any errors from the attempted command
-            while ((s = stdError.readLine()) != null) {
-                errorFlag = true;
-                sb.append(s);
-                sb.append("\n");
-                //System.out.println(s);
+                Platform.runLater(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (errFlagUI) {
+                            if (errMsgUI.equals("")) {
+                                _popup(errFlagUI, "Unknown error.");
+                            } else{
+                                _popup(errFlagUI, errMsgUI);
+                            }
+                        } else {
+                            if (stdMsgUI.length() > 50 &&
+                                    stdMsgUI.substring(stdMsgUI.length() - 50, stdMsgUI.length() - 1).contains("Found no log for " + parser))
+                            {
+                                _popup(errFlagUI, "Found no " + parser.toUpperCase() + " register dump in [" + inFile + "].");
+                            } else {
+                                _popup(errFlagUI, "Completed parsing " + parser.toUpperCase() + " register dump for [" + inFile +
+                                        "].\nResult saved in [" + outDir + "].");
+                            }
+                        }
+                    }
+                });
             }
-            if (errMsg.equals("") && errorFlag) {
-                errMsg = sb.toString();
-            }
-
-        } catch (IOException e) {
-            System.err.println("Caught IOException: " + e.getMessage());
-        }
-
-        _updateConsole(errMsg);
-        if (errorFlag) {
-            if (errMsg.equals("")) {
-                errMsg = "Unknown error.";
-            }
-            _popup(errorFlag, errMsg);
-        } else {
-            if (stdMsg.length() > 50 && stdMsg.substring(stdMsg.length() - 50, stdMsg.length() - 1).contains("Found no log for " + parser)) {
-                _popup(errorFlag, "Found no " + parser.toUpperCase() + " register dump in [" + inFile + "].");
-            } else {
-                _popup(errorFlag, "Completed parsing " + parser.toUpperCase() + " register dump for [" + inFile + "].\nResult saved in [" + outDir + "].");
-            }
-        }
-        return errorFlag;
+        };
+        // run on new thread so that UI is not blocked
+        new Thread(task).start();
     }
 }
 
