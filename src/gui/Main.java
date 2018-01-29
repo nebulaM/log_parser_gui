@@ -2,19 +2,22 @@ package gui;
 
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
 import javafx.event.ActionEvent;
+import javafx.event.EventHandler;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
 import java.io.*;
-
-
+import java.util.Optional;
 
 public class Main extends Application {
     static final String OSSP_PARSER = "ossp";
@@ -27,7 +30,7 @@ public class Main extends Application {
 
     final String BG_DIR =  ROOT + "\\data\\background";
 
-    //dim for layout
+    //params for layout
     static final double LOAD_OUT_Y = 60.0;
     static final double LOAD_IN_Y = 100.0;
     static final double LOAD_WS_Y = 140.0;
@@ -35,12 +38,16 @@ public class Main extends Application {
     static final double LABEL_X = 5.0;
     static final double TF_X = 70.0;
 
+    static final double BUTTON_Y = 200.0;
+
     private String inFile = "";
     private String outDir = DEFAULT_OUTPUT_DIR;
     private String workspace = "";
 
+    private String debug = "";
+
     private final TextArea consoleTA = new TextArea();
-    private final int consoleTA_MAX_LENTH = 100000;
+    private final int consoleTA_MAX_LENTH = 1800000;
 
     //dim of main stage
     private final int width = 800;
@@ -71,6 +78,9 @@ public class Main extends Application {
         // bc workspace button
         final Button loadWsButton = new Button("Choose");
 
+        // clear console button
+        final Button clearButton = new Button("Clear");
+
         final Label outLabel = new Label("Output");
         final Label inLabel = new Label("Input");
         final Label wsLabel = new Label("Workspace");
@@ -78,6 +88,10 @@ public class Main extends Application {
         final TextField loadInTF = new TextField();
         final TextField loadOutTF = new TextField();
         final TextField loadWsTF = new TextField();
+
+        // check box for debug mode
+        final CheckBox debugCheckBox = new CheckBox("Debug Mode");
+        debugCheckBox.setSelected(false);
 
         final FileChooser inFileChooser = new FileChooser();
         inFileChooser.setTitle("Select Input Dump File");
@@ -106,13 +120,16 @@ public class Main extends Application {
 
         /* Layout position */
         osspButton.setLayoutX(400);
-        osspButton.setLayoutY(200);
+        osspButton.setLayoutY(BUTTON_Y);
 
         msguButton.setLayoutX(475);
-        msguButton.setLayoutY(200);
+        msguButton.setLayoutY(BUTTON_Y);
 
         bcButton.setLayoutX(550);
-        bcButton.setLayoutY(200);
+        bcButton.setLayoutY(BUTTON_Y);
+
+        debugCheckBox.setLayoutX(625);
+        debugCheckBox.setLayoutY(BUTTON_Y + 3.0);
 
         loadInButton.setLayoutX(400);
         loadInButton.setLayoutY(LOAD_IN_Y);
@@ -145,17 +162,20 @@ public class Main extends Application {
         consoleTA.setPrefSize(760, 300);
         consoleTA.setWrapText(true);
 
+        clearButton.setLayoutX(700);
+        clearButton.setLayoutY(560);
+
         // Registering handler
         osspButton.setOnAction((ActionEvent event) -> {
-            exec(OSSP_PARSER, inFile, outDir, "", "");
+            exec(OSSP_PARSER, inFile, outDir, debug, "");
 
         });
         msguButton.setOnAction((ActionEvent event) -> {
-            exec(MSGU_PARSER, inFile, outDir, "", "");
+            exec(MSGU_PARSER, inFile, outDir, debug, "");
         });
         bcButton.setOnAction((ActionEvent event) -> {
 
-            exec(BC_PARSER, inFile, outDir, "", workspace);
+            exec(BC_PARSER, inFile, outDir, debug, workspace);
         });
 
         loadInButton.setOnAction((ActionEvent event) -> {
@@ -197,6 +217,36 @@ public class Main extends Application {
                 _updateConsole("No BaseCode workspace selected");
             }
         });
+
+        clearButton.setOnAction((ActionEvent event) -> {
+            consoleTA.setText("");
+        });
+
+        debugCheckBox.onMouseClickedProperty().setValue(new EventHandler<MouseEvent>() {
+            @Override
+            public void handle(MouseEvent event) {
+                debug = "";
+                if (!debugCheckBox.isSelected()) {
+                    _updateConsole("Debug mode is disabled.");
+                    System.out.print(debugCheckBox.isSelected());
+                } else {
+                    debugCheckBox.setSelected(false);
+                    Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+                    alert.setTitle("Confirmation");
+                    alert.setHeaderText("Attempt to Enable Debug Mode");
+                    alert.setContentText("Enable debug mode is not a recommended action. Are you sure to proceed?");
+
+                    Optional<ButtonType> result = alert.showAndWait();
+                    if (result.get() == ButtonType.OK){
+                        debugCheckBox.setSelected(true);
+                        debug = "debug";
+                        _updateConsole("Debug mode is enabled. This action is NOT recommended.");
+                    } else {
+                        _updateConsole("Action on enabling debug mode has been cancelled.");
+                    }
+                }
+            }
+        });
         
         // Initializing Pane class
         final Pane pane = new Pane();
@@ -219,6 +269,9 @@ public class Main extends Application {
         pane.getChildren().add(wsLabel);
 
         pane.getChildren().add(consoleTA);
+        pane.getChildren().add(clearButton);
+
+        pane.getChildren().add(debugCheckBox);
 
         Scene scene = new Scene(pane, width, height);
         scene.getStylesheets().add(this.getClass().getResource("config.css").toExternalForm());
@@ -309,6 +362,11 @@ public class Main extends Application {
     }
 
     private void exec(final String parser, final String inFile, final String outDir, final String debug, final String workspace) {
+        // clear console if debug mode is enabled
+        if (!debug.equals("")) {
+            consoleTA.setText("");
+        }
+
         if (inFile.equals("")) {
             _popup(true, "Please first select an input file for " + parser.toUpperCase() + " parser.");
             return;
@@ -329,7 +387,15 @@ public class Main extends Application {
         }
 
         _updateConsole("Cmd is [" + cmd + "]");
-        
+
+        // prevent from flooding console
+        final int updateThreshold;
+        if (debug.equals("")){
+            updateThreshold = 10;
+        } else {
+            updateThreshold = 2000;
+        }
+
         Runnable task = new Runnable() {
             @Override
             public void run() {
@@ -338,6 +404,7 @@ public class Main extends Application {
                 String msg;
                 String stdMsg = "";
                 String errMsg = "";
+                int count = 0;
                 try {
                     Process p = Runtime.getRuntime().exec(cmd);
 
@@ -354,14 +421,31 @@ public class Main extends Application {
                             errMsg = msg;
                         }
                         stdMsg = msg;
-                        final String line = msg;
+                        sb.append(msg);
+                        sb.append("\n");
+                        count ++;
+                        if (count >= updateThreshold) {
+                            count = 0;
+                            final String line = sb.toString();
+                            sb.setLength(0);
+                            Platform.runLater(new Runnable() {
+                                @Override
+                                public void run() {
+                                    _updateConsole(line);
+                                }
+                            });
+                        }
+                        //System.out.println(msg);
+                    }
+                    if (count > 0 ) {
+                        final String line = sb.toString();
+                        sb.setLength(0);
                         Platform.runLater(new Runnable() {
                             @Override
                             public void run() {
                                 _updateConsole(line);
                             }
                         });
-                        //System.out.println(s);
                     }
 
                     // read any errors from the attempted command
@@ -376,11 +460,16 @@ public class Main extends Application {
                                 _updateConsole(line);
                             }
                         });
-                        //System.out.println(s);
+                        //System.out.println(msg);
                     }
-                }
-                catch (IOException e) {
+                } catch (IOException e) {
                     System.err.println("Caught IOException: " + e.getMessage());
+                    Platform.runLater(new Runnable() {
+                        @Override
+                        public void run() {
+                            _popup(true, "Error, detected IO exception while running.");
+                        }
+                    });
                 }
                 if (errMsg.equals("") && errFlag) {
                     errMsg = sb.toString();
@@ -392,15 +481,16 @@ public class Main extends Application {
                 Platform.runLater(new Runnable() {
                     @Override
                     public void run() {
+                        String lookForMsg = "Found no log for " + parser;
                         if (errFlagUI) {
                             if (errMsgUI.equals("")) {
                                 _popup(errFlagUI, "Unknown error.");
-                            } else{
+                            } else {
                                 _popup(errFlagUI, errMsgUI);
                             }
                         } else {
-                            if (stdMsgUI.length() > 50 &&
-                                    stdMsgUI.substring(stdMsgUI.length() - 50, stdMsgUI.length() - 1).contains("Found no log for " + parser))
+                            if ( (stdMsgUI.length() > 50 && stdMsgUI.substring(stdMsgUI.length() - 50).contains(lookForMsg)) ||
+                                    stdMsgUI.contains(lookForMsg))
                             {
                                 _popup(errFlagUI, "Found no " + parser.toUpperCase() + " register dump in [" + inFile + "].");
                             } else {
