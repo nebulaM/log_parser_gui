@@ -2,8 +2,6 @@ package gui;
 
 import javafx.application.Application;
 import javafx.application.Platform;
-import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.scene.Scene;
@@ -101,8 +99,8 @@ public class Main extends Application {
                 new FileChooser.ExtensionFilter("All files", "*.*")
         );
 
-        DirectoryChooser dirChooser = new DirectoryChooser();
-        dirChooser.setTitle("Select a Directory");
+        DirectoryChooser outDirChooser = new DirectoryChooser();
+        outDirChooser.setTitle("Select a Directory");
 
         // Effect
         final DropShadow effectDS = new DropShadow();
@@ -183,7 +181,16 @@ public class Main extends Application {
             if (selectedFile != null) {
                 inFile = selectedFile.getAbsolutePath();
                 loadInTF.setText(inFile);
+
+                inFileChooser.setInitialDirectory(selectedFile.getParentFile());
+                outDirChooser.setInitialDirectory(selectedFile.getParentFile());
+
+                // also set output dir to input file
+                outDir = selectedFile.getParentFile().getAbsolutePath();
+                loadOutTF.setText(outDir);
+
                 _updateConsole("Select input file: " + inFile);
+                _updateConsole("Auto select output directory: " + outDir);
             } else {
                 _updateConsole("No input file selected");
             }
@@ -191,10 +198,14 @@ public class Main extends Application {
         });
 
         loadOutButton.setOnAction((ActionEvent event) -> {
-            File selectedDir = dirChooser.showDialog(primaryStage);
+            File selectedDir = outDirChooser.showDialog(primaryStage);
             if (selectedDir != null) {
                 outDir = selectedDir.getAbsolutePath();
                 loadOutTF.setText(outDir);
+
+                inFileChooser.setInitialDirectory(selectedDir);
+                outDirChooser.setInitialDirectory(selectedDir);
+
                 _updateConsole("Set output dir: " + outDir);
             } else {
                 _updateConsole("No output dir selected");
@@ -208,7 +219,7 @@ public class Main extends Application {
         });
 
         loadWsButton.setOnAction((ActionEvent event) -> {
-            File selectedDir = dirChooser.showDialog(primaryStage);
+            File selectedDir = outDirChooser.showDialog(primaryStage);
             if (selectedDir != null) {
                 workspace = selectedDir.getAbsolutePath();
                 loadWsTF.setText(workspace);
@@ -228,7 +239,6 @@ public class Main extends Application {
                 debug = "";
                 if (!debugCheckBox.isSelected()) {
                     _updateConsole("Debug mode is disabled.");
-                    System.out.print(debugCheckBox.isSelected());
                 } else {
                     debugCheckBox.setSelected(false);
                     Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
@@ -416,10 +426,6 @@ public class Main extends Application {
 
                     // read the output from the command
                     while ((msg = stdInput.readLine()) != null) {
-                        if (msg.contains("Error:") && !errFlag) {
-                            errFlag = true;
-                            errMsg = msg;
-                        }
                         stdMsg = msg;
                         sb.append(msg);
                         sb.append("\n");
@@ -462,6 +468,7 @@ public class Main extends Application {
                         });
                         //System.out.println(msg);
                     }
+
                 } catch (IOException e) {
                     System.err.println("Caught IOException: " + e.getMessage());
                     Platform.runLater(new Runnable() {
@@ -506,5 +513,3 @@ public class Main extends Application {
         new Thread(task).start();
     }
 }
-
-
