@@ -6,6 +6,10 @@ import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.input.MouseEvent;
@@ -14,6 +18,7 @@ import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+import java.awt.*;
 import java.io.*;
 import java.util.Optional;
 
@@ -23,7 +28,7 @@ public class Main extends Application {
     static final String BC_PARSER = "bc";
     static final String ROOT = System.getProperty("user.dir");
 
-    final String PYTHON_SCRIPT = "python " + ROOT + "\\..\\log_parser\\main.py";
+    final String PYTHON_SCRIPT = "python " + ROOT + "\\log_parser\\main.py";
     final String DEFAULT_OUTPUT_DIR = ROOT + "\\result";
 
     final String BG_DIR =  ROOT + "\\data\\background";
@@ -249,7 +254,7 @@ public class Main extends Application {
                     Optional<ButtonType> result = alert.showAndWait();
                     if (result.get() == ButtonType.OK){
                         debugCheckBox.setSelected(true);
-                        debug = "debug";
+                        debug = "-d";
                         _updateConsole("Debug mode is enabled. This action is NOT recommended.");
                     } else {
                         _updateConsole("Action on enabling debug mode has been cancelled.");
@@ -337,7 +342,13 @@ public class Main extends Application {
         tf.setPrefColumnCount(25);
     }
 
-    private void _popup(Boolean isError, String msg) {
+    /**
+     *  popup a dialog
+     * @param isError type of the dialog, error or message
+     * @param msg msg for this dialog
+     * @param showAndWait whether to show and wait
+     */
+    private void _popup(Boolean isError, String msg, boolean showAndWait) {
         Alert alert;
         if (isError) {
             alert = new Alert(Alert.AlertType.ERROR);
@@ -348,9 +359,59 @@ public class Main extends Application {
             alert.setTitle("MESSAGE");
         }
         alert.setContentText(msg);
-        alert.show();
+
+        if (showAndWait){
+            alert.showAndWait();
+        } else {
+            alert.show();
+        }
     }
 
+    /**
+     * popup a parser completed dialog with hyperlink to the files
+     * @param parser which parser is finished
+     * @param outFilename path to output file
+     */
+    private void _popupComplete(final String parser, final  String outFilename){
+        if (!outFilename.equals("")){
+            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+            alert.setTitle("MESSAGE");
+            GridPane gp = new GridPane();
+            Label iLbl = new Label("Completed parsing " + parser.toUpperCase() + " register dump for: ");
+            Label oLbl = new Label("Result saved in: ");
+            Hyperlink iLink = new Hyperlink(inFile);
+            Hyperlink oLink = new Hyperlink(outFilename);
+            gp.addRow(0, iLbl);
+            gp.addRow(1, iLink);
+            gp.addRow(2, oLbl);
+            gp.addRow(3, oLink);
+
+            iLink.setOnAction( (evt) -> {
+                try {
+                    Desktop.getDesktop().open(new File(inFile));
+                } catch (IOException e){
+                    _popup(true, "Cannot open [" + inFile + "].", false);
+                }
+
+            } );
+
+            oLink.setOnAction( (evt) -> {
+                try {
+                    Desktop.getDesktop().open(new File(outFilename));
+                } catch (IOException e){
+                    _popup(true, "Cannot open [" + outFilename + "].", false);
+                }
+
+            } );
+            alert.getDialogPane().contentProperty().set(gp);
+            alert.showAndWait();
+        }
+    }
+
+    /**
+     * update consoleTA with text, with limited max char defined by consoleTA_MAX_LENTH
+     * @param msg msg to update
+     */
     private void _updateConsole(String msg) {
         String old = consoleTA.getText();
         if (old.length() + msg.length() > consoleTA_MAX_LENTH) {
@@ -371,6 +432,10 @@ public class Main extends Application {
         }
     }
 
+    /**
+     * exec a parser cmd on a new thread in python
+     * @apiNote : request python 2.7.10 or above, request "python" in system path
+     */
     private void exec(final String parser, final String inFile, final String outDir, final String debug, final String workspace) {
         // clear console if debug mode is enabled
         if (!debug.equals("")) {
@@ -378,22 +443,22 @@ public class Main extends Application {
         }
 
         if (inFile.equals("")) {
-            _popup(true, "Please first select an input file for " + parser.toUpperCase() + " parser.");
+            _popup(true, "Please first select an input file for " + parser.toUpperCase() + " parser.", false);
             return;
         }
 
         if (parser.equals(BC_PARSER) && workspace.equals("")) {
-            _popup(true, "Please choose a BaseCode workspace for " + parser.toUpperCase() + " parser.");
+            _popup(true, "Please choose a BaseCode workspace for " + parser.toUpperCase() + " parser.", false);
             return;
         }
 
         final String cmd;
         if(parser.equals(BC_PARSER)) {
             // add " to prevent from whitespace error
-            cmd = PYTHON_SCRIPT + " \"" + parser + "\" \"" + workspace + "\" \"" + inFile + "\" \"" +  outDir + "\" " + debug;
+            cmd = PYTHON_SCRIPT + " \"" + parser + "\" -w \"" + workspace + "\" -i \"" + inFile + "\" -o \"" +  outDir + "\" " + debug;
         } else {
             // add " to prevent from whitespace error
-            cmd = PYTHON_SCRIPT + " \"" + parser + "\" \"" + inFile + "\" \"" + outDir + "\" " + debug;
+            cmd = PYTHON_SCRIPT + " \"" + parser + "\" -i \"" + inFile + "\" -o \"" + outDir + "\" " + debug;
         }
 
         _updateConsole("Cmd is [" + cmd + "]");
@@ -414,6 +479,7 @@ public class Main extends Application {
                 String msg;
                 String stdMsg = "";
                 String errMsg = "";
+                String outFilename = "";
                 int count = 0;
                 try {
                     Process p = Runtime.getRuntime().exec(cmd);
@@ -427,6 +493,9 @@ public class Main extends Application {
                     // read the output from the command
                     while ((msg = stdInput.readLine()) != null) {
                         stdMsg = msg;
+                        if (msg.contains("result is saved in ")) {
+                            outFilename = msg.substring(msg.lastIndexOf("result is saved in ") + "result is saved in ".length());
+                        }
                         sb.append(msg);
                         sb.append("\n");
                         count ++;
@@ -474,35 +543,40 @@ public class Main extends Application {
                     Platform.runLater(new Runnable() {
                         @Override
                         public void run() {
-                            _popup(true, "Error, detected IO exception while running.");
+                            _popup(true, "Error, detected IO exception while running.", false);
                         }
                     });
+                    return;
                 }
-                if (errMsg.equals("") && errFlag) {
+                if (errFlag) {
                     errMsg = sb.toString();
                 }
+
                 final boolean errFlagUI = errFlag;
                 final String errMsgUI = errMsg;
                 final String stdMsgUI = stdMsg;
+                final String outFilenameUI = outFilename;
 
                 Platform.runLater(new Runnable() {
                     @Override
                     public void run() {
-                        String lookForMsg = "Found no log for " + parser;
                         if (errFlagUI) {
                             if (errMsgUI.equals("")) {
-                                _popup(errFlagUI, "Unknown error.");
+                                _popup(errFlagUI, "Unknown error.", false);
                             } else {
-                                _popup(errFlagUI, errMsgUI);
+                                _popup(errFlagUI, errMsgUI, true);
+                                _popupComplete(parser, outFilenameUI);
                             }
                         } else {
+                            String lookForMsg = "Found no log for " + parser;
                             if ( (stdMsgUI.length() > 50 && stdMsgUI.substring(stdMsgUI.length() - 50).contains(lookForMsg)) ||
                                     stdMsgUI.contains(lookForMsg))
                             {
-                                _popup(errFlagUI, "Found no " + parser.toUpperCase() + " register dump in [" + inFile + "].");
+                                _popup(errFlagUI, "Found no " + parser.toUpperCase() + " register dump in [" + inFile + "].", false);
                             } else {
-                                _popup(errFlagUI, "Completed parsing " + parser.toUpperCase() + " register dump for [" + inFile +
-                                        "].\nResult saved in [" + outDir + "].");
+                                /*_popup(errFlagUI, "Completed parsing " + parser.toUpperCase() + " register dump for [" + inFile +
+                                        "].\nResult saved in [" + outDir + "].");*/
+                                _popupComplete(parser, outFilenameUI);
                             }
                         }
                     }
