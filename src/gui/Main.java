@@ -50,7 +50,7 @@ public class Main extends Application {
     private String debug = "";
 
     private final TextArea consoleTA = new TextArea();
-    private final int consoleTA_MAX_LENTH = 1800000;
+    private final int consoleTA_MAX_LENTH = 100000;
 
     //dim of main stage
     private final int width = 800;
@@ -80,6 +80,7 @@ public class Main extends Application {
         final Button loadInButton = new Button("Choose");
         // bc workspace button
         final Button loadWsButton = new Button("Choose");
+        final Button clearWsButton = new Button("Clear");
 
         // clear console button
         final Button clearButton = new Button("Clear");
@@ -115,7 +116,7 @@ public class Main extends Application {
             loadInTF.setText(inFile);
         }
         loadOutTF.setText(outDir);
-        loadWsTF.setPromptText("Set path to workspace, only used by BC parser");
+        loadWsTF.setPromptText("Set path to workspace, required by BC parser");
 
         _initReadOnlyTF(loadInTF);
         _initReadOnlyTF(loadOutTF);
@@ -154,6 +155,10 @@ public class Main extends Application {
 
         loadWsButton.setLayoutX(400);
         loadWsButton.setLayoutY(LOAD_WS_Y);
+        clearWsButton.setLayoutX(475);
+        clearWsButton.setLayoutY(LOAD_WS_Y);
+        clearWsButton.setOpacity(0.6);
+
         loadWsTF.setLayoutX(TF_X);
         loadWsTF.setLayoutY(LOAD_WS_Y);
         wsLabel.setLayoutX(LABEL_X);
@@ -174,7 +179,7 @@ public class Main extends Application {
 
         });
         msguButton.setOnAction((ActionEvent event) -> {
-            exec(MSGU_PARSER, inFile, outDir, debug, "");
+            exec(MSGU_PARSER, inFile, outDir, debug, workspace);
         });
         bcButton.setOnAction((ActionEvent event) -> {
 
@@ -229,9 +234,20 @@ public class Main extends Application {
                 workspace = selectedDir.getAbsolutePath();
                 loadWsTF.setText(workspace);
                 _updateConsole("Set BaseCode workspace: " + workspace);
-            } else {
-                _updateConsole("No BaseCode workspace selected");
             }
+        });
+
+        clearWsButton.setOnAction((ActionEvent event) -> {
+                workspace = "";
+                loadWsTF.setText("");
+                _updateConsole("Clear BaseCode workspace");
+
+        });
+        clearWsButton.setOnMouseMoved(event -> {
+            clearWsButton.setOpacity(1.0);
+        });
+        clearWsButton.setOnMouseExited(event -> {
+            clearWsButton.setOpacity(0.6);
         });
 
         clearButton.setOnAction((ActionEvent event) -> {
@@ -280,6 +296,7 @@ public class Main extends Application {
         pane.getChildren().add(inLabel);
 
         pane.getChildren().add(loadWsButton);
+        pane.getChildren().add(clearWsButton);
         pane.getChildren().add(loadWsTF);
         pane.getChildren().add(wsLabel);
 
@@ -447,13 +464,19 @@ public class Main extends Application {
             return;
         }
 
-        if (parser.equals(BC_PARSER) && workspace.equals("")) {
-            _popup(true, "Please choose a BaseCode workspace for " + parser.toUpperCase() + " parser.", false);
-            return;
+        if (workspace.equals("")) {
+            if(parser.equals(BC_PARSER)) {
+                _popup(true, "Please choose a BaseCode workspace for " + parser.toUpperCase() + " parser.", false);
+                return;
+            } else if (parser.equals(MSGU_PARSER)) {
+                // busy wait on this warning until user click a button
+                _popup(false, "Warning, workspace not selected, use pre-defined header for MSGU firmware log", true);
+                // this is just a warning, not return
+            }
         }
 
         final String cmd;
-        if(parser.equals(BC_PARSER)) {
+        if(parser.equals(BC_PARSER) || parser.equals(MSGU_PARSER)) {
             // add " to prevent from whitespace error
             cmd = PYTHON_SCRIPT + " \"" + parser + "\" -w \"" + workspace + "\" -i \"" + inFile + "\" -o \"" +  outDir + "\" " + debug;
         } else {
