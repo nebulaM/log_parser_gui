@@ -265,7 +265,7 @@ public class Main extends Application {
                     Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
                     alert.setTitle("Confirmation");
                     alert.setHeaderText("Attempt to Enable Debug Mode");
-                    alert.setContentText("Enable debug mode is not a recommended action. Are you sure to proceed?");
+                    alert.setContentText("Enable debug mode in this GUI may cause lagging. Do you still want to proceed?");
 
                     Optional<ButtonType> result = alert.showAndWait();
                     if (result.get() == ButtonType.OK){
@@ -273,7 +273,7 @@ public class Main extends Application {
                         debug = "-d";
                         _updateConsole("Debug mode is enabled. This action is NOT recommended.");
                     } else {
-                        _updateConsole("Action on enabling debug mode has been cancelled.");
+                        _updateConsole("Debug mode remains disabled.");
                     }
                 }
             }
