@@ -20,6 +20,7 @@ import javafx.stage.Stage;
 
 import java.awt.*;
 import java.io.*;
+import java.nio.file.Files;
 import java.util.Optional;
 
 public class Main extends Application {
@@ -31,7 +32,8 @@ public class Main extends Application {
     final String PYTHON_SCRIPT = "python " + ROOT + "\\log_parser\\main.py";
     final String DEFAULT_OUTPUT_DIR = ROOT + "\\result";
 
-    final String BG_DIR =  ROOT + "\\data\\background";
+    final String USER_DATA_DIR  = ROOT + "\\data";
+    final String BACKGROUND_DIR = USER_DATA_DIR + "\\background";
 
     //params for layout
     static final double LOAD_OUT_Y = 60.0;
@@ -82,6 +84,9 @@ public class Main extends Application {
         final Button loadWsButton = new Button("Choose");
         final Button clearWsButton = new Button("Clear");
 
+		//change background button
+        final Button changeBGButton = new Button("Background");
+
         // clear console button
         final Button clearButton = new Button("Clear");
 
@@ -107,6 +112,17 @@ public class Main extends Application {
 
         DirectoryChooser outDirChooser = new DirectoryChooser();
         outDirChooser.setTitle("Select a Directory");
+
+        // background image chooser
+        final FileChooser bgFileChooser = new FileChooser();
+        bgFileChooser.setTitle("Select Background");
+        bgFileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("Image files", "*.jpg", "*.png", "*.bmp")
+        );
+        File backgroundDir = new File(BACKGROUND_DIR);
+        if (backgroundDir.exists() && backgroundDir.isDirectory()){
+            bgFileChooser.setInitialDirectory(backgroundDir);
+        }
 
         // Effect
         final DropShadow effectDS = new DropShadow();
@@ -164,6 +180,9 @@ public class Main extends Application {
         wsLabel.setLayoutX(LABEL_X);
         wsLabel.setLayoutY(LOAD_WS_Y + 3);
         wsLabel.setEffect(effectDS);
+
+        changeBGButton.setLayoutX(625);
+        changeBGButton.setLayoutY(60);
 
         consoleTA.setLayoutX(10);
         consoleTA.setLayoutY(250);
@@ -300,6 +319,8 @@ public class Main extends Application {
         pane.getChildren().add(loadWsTF);
         pane.getChildren().add(wsLabel);
 
+        pane.getChildren().add(changeBGButton);
+
         pane.getChildren().add(consoleTA);
         pane.getChildren().add(clearButton);
 
@@ -307,18 +328,37 @@ public class Main extends Application {
 
         Scene scene = new Scene(pane, width, height);
         scene.getStylesheets().add(this.getClass().getResource("config.css").toExternalForm());
+        
         //background
-        try {
-            BackgroundImage backgroundImage = new BackgroundImage(new Image
-                    (new BufferedInputStream(new FileInputStream(BG_DIR + "\\kimiuso.png"))),
-                    BackgroundRepeat.NO_REPEAT, BackgroundRepeat.NO_REPEAT, BackgroundPosition.CENTER,
-                    BackgroundSize.DEFAULT);
-            //Background background = new Background(backgroundImage);
-            pane.setBackground(new Background(backgroundImage));
-        } catch (FileNotFoundException e) {
-            System.err.println("Caught FileNotFoundException: " + e.getMessage());
-        }
+        changeBGButton.setOnMousePressed((MouseEvent event) -> {
+            if (event.isPrimaryButtonDown()) {
+                File selectedFile = bgFileChooser.showOpenDialog(primaryStage);
+                if (selectedFile != null) {
+                    try {
+                        _copyFile(selectedFile, BACKGROUND_DIR);
+                        BackgroundImage backgroundImage = new BackgroundImage(new Image
+                                (new BufferedInputStream(new FileInputStream(selectedFile.getAbsolutePath()))),
+                                BackgroundRepeat.REPEAT, BackgroundRepeat.REPEAT, BackgroundPosition.CENTER,
+                                new BackgroundSize(100, 100, true, true, true,false));
+                        pane.setBackground(new Background(backgroundImage));
+                        _updateConsole("Update background image.");
+                    } catch (FileNotFoundException e) {
+                        System.err.println("Caught FileNotFoundException: " + e.getMessage());
+                    }
 
+                    bgFileChooser.setInitialDirectory(selectedFile.getParentFile());
+                } else {
+                    _updateConsole("No background image selected.");
+                }
+            } else if (event.isSecondaryButtonDown()){
+                InputStream in = getClass().getResourceAsStream("resources/background/kimiuso.png");
+                BackgroundImage backgroundImage = new BackgroundImage(new Image(in), BackgroundRepeat.NO_REPEAT,
+                        BackgroundRepeat.NO_REPEAT, BackgroundPosition.CENTER, BackgroundSize.DEFAULT);
+                pane.setBackground(new Background(backgroundImage));
+
+                _updateConsole("Set default background.");
+            }
+        });
 
         // Adding the title to the window (primaryStage)
         primaryStage.setTitle("BaseCode Log Parser");
@@ -608,5 +648,27 @@ public class Main extends Application {
         };
         // run on new thread so that UI is not blocked
         new Thread(task).start();
+    }
+
+    /**
+     * Copy file src to dir dirname with error handling
+     * @param src file to be copied
+     * @param dirname dest directory
+     */
+    private void _copyFile(File src, String dirname){
+        File directory = new File(dirname);
+        if (! directory.exists()){
+            if (!directory.mkdirs()){
+                _updateConsole("Cannot make dir " + dirname);
+                return;
+            }
+        }
+        File dest = new File(directory.toString() + "\\" + src.getName());
+        try {
+            Files.copy(src.toPath(), dest.toPath());
+        } catch (IOException e) {
+            _updateConsole("Cannot copy file from " + src.toString() + "to " + dest.toString());
+            e.printStackTrace();
+        }
     }
 }

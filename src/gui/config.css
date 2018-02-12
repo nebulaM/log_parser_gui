@@ -1,3 +1,9 @@
+.root {
+    -fx-background-image: url("resources/background/kimiuso.png");
+    -fx-background-position: center center;
+    -fx-background-size: auto;
+
+}
 .text-area {
     -fx-background-color: rgba(211, 210, 205, 0.5);
 }
