@@ -34,6 +34,7 @@ public class Main extends Application {
 
     final String USER_DATA_DIR  = ROOT + "\\data";
     final String BACKGROUND_DIR = USER_DATA_DIR + "\\background";
+    final String USER_SETTINGS_FILENAME = USER_DATA_DIR + "\\settings";
 
     //params for layout
     static final double LOAD_OUT_Y = 60.0;
@@ -50,6 +51,8 @@ public class Main extends Application {
     private String workspace = "";
 
     private String debug = "";
+
+    private String background = "";
 
     private final TextArea consoleTA = new TextArea();
     private final int consoleTA_MAX_LENTH = 100000;
@@ -97,10 +100,12 @@ public class Main extends Application {
         final TextField loadInTF = new TextField();
         final TextField loadOutTF = new TextField();
         final TextField loadWsTF = new TextField();
+        loadInTF.setPromptText("Choose an input dump file");
+        loadOutTF.setPromptText("Choose an output dir");
+        loadWsTF.setPromptText("Set path to workspace, required by BC parser");
 
         // check box for debug mode
         final CheckBox debugCheckBox = new CheckBox("Debug Mode");
-        debugCheckBox.setSelected(false);
 
         final FileChooser inFileChooser = new FileChooser();
         inFileChooser.setTitle("Select Input Dump File");
@@ -112,6 +117,9 @@ public class Main extends Application {
 
         DirectoryChooser outDirChooser = new DirectoryChooser();
         outDirChooser.setTitle("Select a Directory");
+
+        DirectoryChooser wsDirChooser = new DirectoryChooser();
+        wsDirChooser.setTitle("Select a Directory to BaseCode Workspace");
 
         // background image chooser
         final FileChooser bgFileChooser = new FileChooser();
@@ -127,12 +135,18 @@ public class Main extends Application {
         // Effect
         final DropShadow effectDS = new DropShadow();
 
-        loadInTF.setPromptText("Choose an input dump file");
-        if (!inFile.equals("")) {
-            loadInTF.setText(inFile);
-        }
+        _getSettings(USER_SETTINGS_FILENAME);
+        loadInTF.setText(inFile);
         loadOutTF.setText(outDir);
-        loadWsTF.setPromptText("Set path to workspace, required by BC parser");
+        loadWsTF.setText((workspace));
+        if (debug.equals("-d")){
+            debugCheckBox.setSelected(true);
+        } else {
+            debugCheckBox.setSelected(false);
+        }
+        inFileChooser.setInitialDirectory(new File(inFile).getParentFile());
+        outDirChooser.setInitialDirectory(new File(outDir));
+        wsDirChooser.setInitialDirectory(new File(workspace).getAbsoluteFile());
 
         _initReadOnlyTF(loadInTF);
         _initReadOnlyTF(loadOutTF);
@@ -210,18 +224,21 @@ public class Main extends Application {
             if (selectedFile != null) {
                 inFile = selectedFile.getAbsolutePath();
                 loadInTF.setText(inFile);
-
+                // next time open the file chooser, go to current folder
                 inFileChooser.setInitialDirectory(selectedFile.getParentFile());
-                outDirChooser.setInitialDirectory(selectedFile.getParentFile());
 
-                // also set output dir to input file
+                // also set output dir to input file's parent dir
                 outDir = selectedFile.getParentFile().getAbsolutePath();
                 loadOutTF.setText(outDir);
+
+                outDirChooser.setInitialDirectory(selectedFile.getParentFile());
 
                 _updateConsole("Select input file: " + inFile);
                 _updateConsole("Auto select output directory: " + outDir);
             } else {
-                _updateConsole("No input file selected");
+                if(inFile.equals("")) {
+                    _updateConsole("No input file selected.");
+                }
             }
 
         });
@@ -232,12 +249,9 @@ public class Main extends Application {
                 outDir = selectedDir.getAbsolutePath();
                 loadOutTF.setText(outDir);
 
-                inFileChooser.setInitialDirectory(selectedDir);
                 outDirChooser.setInitialDirectory(selectedDir);
 
                 _updateConsole("Set output dir: " + outDir);
-            } else {
-                _updateConsole("No output dir selected");
             }
         });
 
@@ -248,11 +262,18 @@ public class Main extends Application {
         });
 
         loadWsButton.setOnAction((ActionEvent event) -> {
-            File selectedDir = outDirChooser.showDialog(primaryStage);
+            File selectedDir = wsDirChooser.showDialog(primaryStage);
             if (selectedDir != null) {
                 workspace = selectedDir.getAbsolutePath();
                 loadWsTF.setText(workspace);
+
+                wsDirChooser.setInitialDirectory(selectedDir);
+
                 _updateConsole("Set BaseCode workspace: " + workspace);
+            } else {
+                if (workspace.equals("")){
+                    _updateConsole("No workspace selected.");
+                }
             }
         });
 
@@ -297,7 +318,7 @@ public class Main extends Application {
                 }
             }
         });
-        
+
         // Initializing Pane class
         final Pane pane = new Pane();
         // Adding all the nodes to the FlowPane
@@ -334,19 +355,20 @@ public class Main extends Application {
             if (event.isPrimaryButtonDown()) {
                 File selectedFile = bgFileChooser.showOpenDialog(primaryStage);
                 if (selectedFile != null) {
+                    String temp = background;
                     try {
-                        _copyFile(selectedFile, BACKGROUND_DIR);
+                        background = _copyFile(selectedFile, BACKGROUND_DIR);
                         BackgroundImage backgroundImage = new BackgroundImage(new Image
                                 (new BufferedInputStream(new FileInputStream(selectedFile.getAbsolutePath()))),
                                 BackgroundRepeat.REPEAT, BackgroundRepeat.REPEAT, BackgroundPosition.CENTER,
                                 new BackgroundSize(100, 100, true, true, true,false));
                         pane.setBackground(new Background(backgroundImage));
                         _updateConsole("Update background image.");
+                        bgFileChooser.setInitialDirectory(selectedFile.getParentFile());
                     } catch (FileNotFoundException e) {
+                        background = temp;
                         System.err.println("Caught FileNotFoundException: " + e.getMessage());
                     }
-
-                    bgFileChooser.setInitialDirectory(selectedFile.getParentFile());
                 } else {
                     _updateConsole("No background image selected.");
                 }
@@ -355,7 +377,7 @@ public class Main extends Application {
                 BackgroundImage backgroundImage = new BackgroundImage(new Image(in), BackgroundRepeat.NO_REPEAT,
                         BackgroundRepeat.NO_REPEAT, BackgroundPosition.CENTER, BackgroundSize.DEFAULT);
                 pane.setBackground(new Background(backgroundImage));
-
+                background = "";
                 _updateConsole("Set default background.");
             }
         });
@@ -366,6 +388,19 @@ public class Main extends Application {
         primaryStage.setResizable(false);
         // Show the window(primaryStage)
         primaryStage.show();
+
+        // set background, this must be done after primaryStage.show()
+        if (!background.equals("")){
+            try {
+                BackgroundImage backgroundImage = new BackgroundImage(new Image
+                        (new BufferedInputStream(new FileInputStream(background))),
+                        BackgroundRepeat.REPEAT, BackgroundRepeat.REPEAT, BackgroundPosition.CENTER,
+                        new BackgroundSize(100, 100, true, true, true, false));
+                pane.setBackground(new Background(backgroundImage));
+            } catch (FileNotFoundException e){
+                e.printStackTrace();
+            }
+        }
     }
 
     @Override
@@ -376,6 +411,7 @@ public class Main extends Application {
         //Use Platorm.exit() instead of System.exit(0).
         //is called. This is where you should offer to
         //save unsaved stuff the user has generated.
+        _saveSettings(USER_SETTINGS_FILENAME);
     }
 
     /**
@@ -654,13 +690,14 @@ public class Main extends Application {
      * Copy file src to dir dirname with error handling
      * @param src file to be copied
      * @param dirname dest directory
+     * @return dest filename
      */
-    private void _copyFile(File src, String dirname){
+    private String _copyFile(File src, String dirname){
         File directory = new File(dirname);
         if (! directory.exists()){
             if (!directory.mkdirs()){
                 _updateConsole("Cannot make dir " + dirname);
-                return;
+                return "";
             }
         }
         File dest = new File(directory.toString() + "\\" + src.getName());
@@ -668,6 +705,68 @@ public class Main extends Application {
             Files.copy(src.toPath(), dest.toPath());
         } catch (IOException e) {
             _updateConsole("Cannot copy file from " + src.toString() + "to " + dest.toString());
+            e.printStackTrace();
+            return "";
+        }
+        return dest.getAbsolutePath();
+    }
+
+    private void _saveSettings(String filename){
+        try {
+            PrintWriter writer = new PrintWriter(filename, "UTF-8");
+            writer.println("inFile," + inFile);
+            writer.println("outDir," + outDir);
+            writer.println("workspace," + workspace);
+            writer.println("debug," + debug);
+            writer.println("background," + background);
+
+            writer.close();
+
+        } catch (FileNotFoundException e){
+            e.printStackTrace();
+        } catch (UnsupportedEncodingException e){
+            e.printStackTrace();
+        }
+    }
+
+    private  void _getSettings(String filename){
+        try{
+            String line;
+            BufferedReader reader = new BufferedReader(new FileReader(filename));
+            try {
+                while ((line = reader.readLine()) != null) {
+                    String sl[] = line.split(",");
+                    if(sl.length == 2) {
+                        switch (sl[0]) {
+                            case "inFile":
+                                if(new File(sl[1]).isFile()) {
+                                    inFile = sl[1];
+                                }
+                                break;
+                            case "outDir":
+                                if(new File(sl[1]).isDirectory()) {
+                                    outDir = sl[1];
+                                }
+                                break;
+                            case "workspace":
+                                if(new File(sl[1]).isDirectory()) {
+                                    workspace = sl[1];
+                                }
+                                break;
+                            case "debug":
+                                debug = sl[1];
+                                break;
+                            case "background":
+                                if(new File(sl[1]).isFile()) {
+                                    background = sl[1];
+                                }
+                        }
+                    }
+                }
+            } catch (IOException e){
+                e.printStackTrace();
+            }
+        } catch (FileNotFoundException e){
             e.printStackTrace();
         }
     }
