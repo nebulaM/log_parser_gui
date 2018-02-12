@@ -37,8 +37,8 @@ public class Main extends Application {
     final String USER_SETTINGS_FILENAME = USER_DATA_DIR + "\\settings";
 
     //params for layout
-    static final double LOAD_OUT_Y = 60.0;
-    static final double LOAD_IN_Y = 100.0;
+    static final double LOAD_IN_Y = 60.0;
+    static final double LOAD_OUT_Y = 100.0;
     static final double LOAD_WS_Y = 140.0;
 
     static final double LABEL_X = 5.0;
