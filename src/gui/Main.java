@@ -18,6 +18,7 @@ import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+import javax.xml.stream.FactoryConfigurationError;
 import java.awt.*;
 import java.io.*;
 import java.nio.file.Files;
@@ -60,6 +61,8 @@ public class Main extends Application {
     //dim of main stage
     private final int width = 800;
     private final int height = 600;
+
+    private boolean userSetOutDir = false;
 
     public Main() {
         //Optional constructor
@@ -227,14 +230,17 @@ public class Main extends Application {
                 // next time open the file chooser, go to current folder
                 inFileChooser.setInitialDirectory(selectedFile.getParentFile());
 
-                // also set output dir to input file's parent dir
-                outDir = selectedFile.getParentFile().getAbsolutePath();
-                loadOutTF.setText(outDir);
-
-                outDirChooser.setInitialDirectory(selectedFile.getParentFile());
-
                 _updateConsole("Select input file: " + inFile);
-                _updateConsole("Auto select output directory: " + outDir);
+
+                if(!userSetOutDir) {
+                    // also set output dir to input file's parent dir
+                    outDir = selectedFile.getParentFile().getAbsolutePath();
+                    loadOutTF.setText(outDir);
+
+                    outDirChooser.setInitialDirectory(selectedFile.getParentFile());
+
+                    _updateConsole("Auto select output directory: " + outDir);
+                }
             } else {
                 if(inFile.equals("")) {
                     _updateConsole("No input file selected.");
@@ -250,6 +256,10 @@ public class Main extends Application {
                 loadOutTF.setText(outDir);
 
                 outDirChooser.setInitialDirectory(selectedDir);
+
+                // if user manually change out dir,
+                // then do not auto select out dir based on input dump file
+                userSetOutDir = true;
 
                 _updateConsole("Set output dir: " + outDir);
             }
