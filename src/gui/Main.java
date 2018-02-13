@@ -722,6 +722,13 @@ public class Main extends Application {
     }
 
     private void _saveSettings(String filename){
+        File directory = new File(filename).getParentFile();
+        if (! directory.exists()){
+            if (!directory.mkdirs()){
+                System.out.println("Cannot make dir " + directory.getAbsolutePath());
+                return;
+            }
+        }
         try {
             PrintWriter writer = new PrintWriter(filename, "UTF-8");
             writer.println("inFile," + inFile);
