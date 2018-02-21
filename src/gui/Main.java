@@ -83,12 +83,10 @@ public class Main extends Application {
         final Button bcButton = new Button(BC_PARSER.toUpperCase());
         //output buttons
         final Button loadOutButton = new Button("Change");
-        final Button defaultOutButton = new Button("Default");
         // input button
         final Button loadInButton = new Button("Choose");
         // bc workspace button
         final Button loadWsButton = new Button("Choose");
-        final Button clearWsButton = new Button("Clear");
 
 		//change background button
         final Button changeBGButton = new Button("Background");
@@ -178,8 +176,7 @@ public class Main extends Application {
 
         loadOutButton.setLayoutX(400);
         loadOutButton.setLayoutY(LOAD_OUT_Y);
-        defaultOutButton.setLayoutX(475);
-        defaultOutButton.setLayoutY(LOAD_OUT_Y);
+
         loadOutTF.setLayoutX(TF_X);
         loadOutTF.setLayoutY(LOAD_OUT_Y);
         outLabel.setLayoutX(LABEL_X);
@@ -188,9 +185,6 @@ public class Main extends Application {
 
         loadWsButton.setLayoutX(400);
         loadWsButton.setLayoutY(LOAD_WS_Y);
-        clearWsButton.setLayoutX(475);
-        clearWsButton.setLayoutY(LOAD_WS_Y);
-        clearWsButton.setOpacity(0.6);
 
         loadWsTF.setLayoutX(TF_X);
         loadWsTF.setLayoutY(LOAD_WS_Y);
@@ -222,82 +216,88 @@ public class Main extends Application {
             exec(BC_PARSER, inFile, outDir, debug, workspace);
         });
 
-        loadInButton.setOnAction((ActionEvent event) -> {
-            File selectedFile = inFileChooser.showOpenDialog(primaryStage);
-            if (selectedFile != null) {
-                inFile = selectedFile.getAbsolutePath();
+        loadInButton.setOnMousePressed((MouseEvent event) -> {
+            if (event.isPrimaryButtonDown()) {
+                File selectedFile = inFileChooser.showOpenDialog(primaryStage);
+                if (selectedFile != null) {
+                    inFile = selectedFile.getAbsolutePath();
+                    loadInTF.setText(inFile);
+                    // next time open the file chooser, go to current folder
+                    inFileChooser.setInitialDirectory(selectedFile.getParentFile());
+
+                    _updateConsole("Select input file: " + inFile);
+
+                    if (!userSetOutDir) {
+                        // also set output dir to input file's parent dir
+                        outDir = selectedFile.getParentFile().getAbsolutePath();
+                        loadOutTF.setText(outDir);
+
+                        outDirChooser.setInitialDirectory(selectedFile.getParentFile());
+
+                        _updateConsole("Auto select output directory: " + outDir);
+                    }
+                } else {
+                    if (inFile.equals("")) {
+                        _updateConsole("No input file selected.");
+                    }
+                }
+            } else if(event.isSecondaryButtonDown()){
+                _updateConsole("Clear input file.");
+
+                // also set back out dir if out dir was not manually changed by user
+                if(!userSetOutDir && new File(inFile).getParentFile().toString().equals(outDir)) {
+                    outDir = DEFAULT_OUTPUT_DIR;
+                    loadOutTF.setText(outDir);
+                    _updateConsole("Set default output dir: " + outDir);
+                }
+                inFile = "";
                 loadInTF.setText(inFile);
-                // next time open the file chooser, go to current folder
-                inFileChooser.setInitialDirectory(selectedFile.getParentFile());
+            }
 
-                _updateConsole("Select input file: " + inFile);
+        });
 
-                if(!userSetOutDir) {
-                    // also set output dir to input file's parent dir
-                    outDir = selectedFile.getParentFile().getAbsolutePath();
+        loadOutButton.setOnMousePressed((MouseEvent event) -> {
+            if (event.isPrimaryButtonDown()) {
+                File selectedDir = outDirChooser.showDialog(primaryStage);
+                if (selectedDir != null) {
+                    outDir = selectedDir.getAbsolutePath();
                     loadOutTF.setText(outDir);
 
-                    outDirChooser.setInitialDirectory(selectedFile.getParentFile());
+                    outDirChooser.setInitialDirectory(selectedDir);
 
-                    _updateConsole("Auto select output directory: " + outDir);
+                    // if user manually change out dir,
+                    // then do not auto select out dir based on input dump file
+                    userSetOutDir = true;
+
+                    _updateConsole("Set output dir: " + outDir);
                 }
-            } else {
-                if(inFile.equals("")) {
-                    _updateConsole("No input file selected.");
-                }
-            }
-
-        });
-
-        loadOutButton.setOnAction((ActionEvent event) -> {
-            File selectedDir = outDirChooser.showDialog(primaryStage);
-            if (selectedDir != null) {
-                outDir = selectedDir.getAbsolutePath();
+            } else if (event.isSecondaryButtonDown()){
+                outDir = DEFAULT_OUTPUT_DIR;
                 loadOutTF.setText(outDir);
-
-                outDirChooser.setInitialDirectory(selectedDir);
-
-                // if user manually change out dir,
-                // then do not auto select out dir based on input dump file
-                userSetOutDir = true;
-
-                _updateConsole("Set output dir: " + outDir);
+                _updateConsole("Set default output dir: " + outDir);
             }
         });
 
-        defaultOutButton.setOnAction((ActionEvent event) -> {
-            outDir = DEFAULT_OUTPUT_DIR;
-            loadOutTF.setText(outDir);
-            _updateConsole("Set default output dir: " + outDir);
-        });
+        loadWsButton.setOnMousePressed((MouseEvent event) -> {
+            if (event.isPrimaryButtonDown()) {
+                File selectedDir = wsDirChooser.showDialog(primaryStage);
+                if (selectedDir != null) {
+                    workspace = selectedDir.getAbsolutePath();
+                    loadWsTF.setText(workspace);
 
-        loadWsButton.setOnAction((ActionEvent event) -> {
-            File selectedDir = wsDirChooser.showDialog(primaryStage);
-            if (selectedDir != null) {
-                workspace = selectedDir.getAbsolutePath();
-                loadWsTF.setText(workspace);
+                    wsDirChooser.setInitialDirectory(selectedDir);
 
-                wsDirChooser.setInitialDirectory(selectedDir);
-
-                _updateConsole("Set BaseCode workspace: " + workspace);
-            } else {
-                if (workspace.equals("")){
-                    _updateConsole("No workspace selected.");
+                    _updateConsole("Set BaseCode workspace: " + workspace);
+                } else {
+                    if (workspace.equals("")) {
+                        _updateConsole("No workspace selected.");
+                    }
                 }
-            }
-        });
-
-        clearWsButton.setOnAction((ActionEvent event) -> {
+            } else if (event.isSecondaryButtonDown()){
                 workspace = "";
                 loadWsTF.setText("");
                 _updateConsole("Clear BaseCode workspace");
-
-        });
-        clearWsButton.setOnMouseMoved(event -> {
-            clearWsButton.setOpacity(1.0);
-        });
-        clearWsButton.setOnMouseExited(event -> {
-            clearWsButton.setOpacity(0.6);
+            }
         });
 
         clearButton.setOnAction((ActionEvent event) -> {
@@ -337,7 +337,7 @@ public class Main extends Application {
         pane.getChildren().add(bcButton);
 
         pane.getChildren().add(loadOutButton);
-        pane.getChildren().add(defaultOutButton);
+
         pane.getChildren().add(loadOutTF);
         pane.getChildren().add(outLabel);
 
@@ -346,7 +346,7 @@ public class Main extends Application {
         pane.getChildren().add(inLabel);
 
         pane.getChildren().add(loadWsButton);
-        pane.getChildren().add(clearWsButton);
+
         pane.getChildren().add(loadWsTF);
         pane.getChildren().add(wsLabel);
 
