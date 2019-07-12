@@ -2,8 +2,12 @@ package gui;
 
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.concurrent.Task;
+import javafx.concurrent.WorkerStateEvent;
 import javafx.event.ActionEvent;
+import javafx.event.Event;
 import javafx.event.EventHandler;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.Button;
@@ -14,11 +18,11 @@ import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
-import javafx.stage.DirectoryChooser;
-import javafx.stage.FileChooser;
-import javafx.stage.Stage;
+import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
+import javafx.stage.*;
 
-import javax.xml.stream.FactoryConfigurationError;
 import java.awt.*;
 import java.io.*;
 import java.nio.file.Files;
@@ -30,7 +34,7 @@ public class Main extends Application {
     static final String BC_PARSER = "bc";
     static final String ROOT = System.getProperty("user.dir");
 
-    final String PYTHON_SCRIPT = "python " + ROOT + "\\log_parser\\main.py";
+    final String PYTHON_SCRIPT = "python " + ROOT + "\\main.py";
     final String DEFAULT_OUTPUT_DIR = ROOT + "\\result";
 
     final String USER_DATA_DIR  = ROOT + "\\data";
@@ -63,6 +67,13 @@ public class Main extends Application {
     private final int height = 600;
 
     private boolean userSetOutDir = false;
+
+    // global count for number of tasks
+    private final int MAX_TASK_COUNT = 5;
+    private ProgressIndicator[] progressIndicators = new ProgressIndicator[MAX_TASK_COUNT];
+    private Label[] progressLabels = new Label[MAX_TASK_COUNT];
+    private final Lock taskCountSpinLock = new Lock();
+    private int taskCount = 0;
 
     public Main() {
         //Optional constructor
@@ -135,6 +146,23 @@ public class Main extends Application {
 
         // Effect
         final DropShadow effectDS = new DropShadow();
+        effectDS.setOffsetY(3.0f);
+
+        //progress
+        for(int i=0; i < MAX_TASK_COUNT; ++i){
+            final ProgressIndicator progressIndicator = new ProgressIndicator();
+            progressIndicator.setLayoutX(60*i + 20);
+            progressIndicator.setLayoutY(545);
+            progressIndicator.setVisible(false);
+            progressIndicators[i] = progressIndicator;
+            final Label progressLabel = new Label();
+            progressLabel.setFont(Font.font(11));
+            progressLabel.setTextFill(Color.rgb(75,181, 216));
+            progressLabel.setLayoutX(60*i + 27);
+            progressLabel.setLayoutY(565);
+            progressLabel.setVisible(false);
+            progressLabels[i] = progressLabel;
+        }
 
         _getSettings(USER_SETTINGS_FILENAME);
         loadInTF.setText(inFile);
@@ -357,6 +385,9 @@ public class Main extends Application {
 
         pane.getChildren().add(debugCheckBox);
 
+        pane.getChildren().addAll(progressIndicators);
+        pane.getChildren().addAll(progressLabels);
+
         Scene scene = new Scene(pane, width, height);
         scene.getStylesheets().add(this.getClass().getResource("config.css").toExternalForm());
         
@@ -551,7 +582,7 @@ public class Main extends Application {
         }
 
         if (workspace.equals("")) {
-            if(parser.equals(BC_PARSER)) {
+            if (parser.equals(BC_PARSER)) {
                 _popup(true, "Please choose a BaseCode workspace for " + parser.toUpperCase() + " parser.", false);
                 return;
             } else if (parser.equals(MSGU_PARSER)) {
@@ -559,6 +590,11 @@ public class Main extends Application {
                 _popup(false, "Warning, workspace not selected, use pre-defined header for MSGU firmware log", true);
                 // this is just a warning, not return
             }
+        }
+
+        if(taskCount >= MAX_TASK_COUNT){
+            _popup(true, "Support at most " +MAX_TASK_COUNT +" tasks running concurrently, please try again later.", true);
+            return;
         }
 
         final String cmd;
@@ -580,9 +616,9 @@ public class Main extends Application {
             updateThreshold = 2000;
         }
 
-        Runnable task = new Runnable() {
+        Task task = new Task<Void>() {
             @Override
-            public void run() {
+            public Void call() throws Exception {
                 Boolean errFlag = false;
                 StringBuilder sb = new StringBuilder();
                 String msg;
@@ -655,8 +691,9 @@ public class Main extends Application {
                             _popup(true, "Error, detected IO exception while running.", false);
                         }
                     });
-                    return;
+                    return null;
                 }
+
                 if (errFlag) {
                     errMsg = sb.toString();
                 }
@@ -690,10 +727,51 @@ public class Main extends Application {
                         }
                     }
                 });
+                return null;
             }
         };
+
+        final int taskID = taskCount;
+        task.setOnSucceeded(new EventHandler<WorkerStateEvent>() {
+            @Override
+            public void handle(WorkerStateEvent t) {
+                if(taskID < MAX_TASK_COUNT) {
+                    progressIndicators[taskID].setVisible(false);
+                    progressLabels[taskID].setVisible(false);
+                }
+                try {
+                    taskCountSpinLock.lock();
+                    if(taskCount > 0) {
+                        taskCount--;
+                    }
+                    taskCountSpinLock.unlock();
+                } catch (InterruptedException e){
+                    _updateConsole("Interrupt Exception on task finished, task count is not properly decreased");
+                }
+            }
+        });
+
         // run on new thread so that UI is not blocked
-        new Thread(task).start();
+        try{
+            taskCountSpinLock.lock();
+            if(taskID < MAX_TASK_COUNT) {
+                if(parser.equals(BC_PARSER)) {
+                    progressLabels[taskID].setText("   " + parser.toUpperCase() + taskID);
+                } else {
+                    progressLabels[taskID].setText(parser.toUpperCase() + taskID);
+                }
+                progressIndicators[taskID].setVisible(true);
+                progressLabels[taskID].setVisible(true);
+                taskCount++;
+                taskCountSpinLock.unlock();
+                new Thread(task).start();
+            } else {
+                taskCountSpinLock.unlock();
+            }
+        } catch (InterruptedException e){
+            _updateConsole("Interrupt Exception, task abort: " + cmd);
+        }
+
     }
 
     /**
@@ -785,6 +863,23 @@ public class Main extends Application {
             }
         } catch (FileNotFoundException e){
             e.printStackTrace();
+        }
+    }
+    class Lock{
+
+        private boolean isLocked = false;
+
+        public synchronized void lock()
+                throws InterruptedException{
+            while(isLocked){
+                wait();
+            }
+            isLocked = true;
+        }
+
+        public synchronized void unlock(){
+            isLocked = false;
+            notify();
         }
     }
 }
